@@ -3,6 +3,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "tjpeg_buffer.h"
+#include "tjpeg_image_chunk.h"
+
 
 /**
  * @file Tiny JPEG encoder
@@ -53,25 +56,38 @@
  * Image processor object. This structure contains no public members.
  */
 typedef struct _jpeg_proc_t {
-  uint16_t  image_width;
-  uint16_t  image_height;
-  uint16_t  x_pos;
-  uint16_t  y_pos;
-  uint16_t  data_width;
-  uint8_t   *data;
-  uint8_t   data_x_pos;
-  uint8_t   buffer[32];   /* Word is 8-bit wide */
-  uint8_t   write_offset; /* To which word in buffer to write */
-  uint8_t   bit_offset;   /* To which bit in word to write */
-  uint8_t   read_offset;  /* Which word from buffer to read */
-  int16_t   last_y_dc;
-  int16_t   last_cr_dc;
-  int16_t   last_cb_dc;
+  uint16_t        image_width;
+  uint16_t        image_height;
+  uint16_t        x_pos;
+  uint16_t        y_pos;
+  int16_t         last_y1_dc;
+  int16_t         last_y2_dc;
+  int16_t         last_cr_dc;
+  int16_t         last_cb_dc;
+  bool            eoi;
+  int             blocks_n;
+  tjpeg_image_chunk_t   chunk;
+  tjpeg_buffer_t        buffer;
 } jpeg_proc_t;
 
+/**
+ * JFIF File header descriptor
+ * File header should be copied at the beginnig of output file. 4 bytes need to
+ * be changed:
+ *   data + image_width_offset      -- high byte of image_width
+ *   data + image_width_offset + 1  -- low byte of image_width
+ *   data + image_height_offset     -- high byte of image_height
+ *   data + image_height_offset + 1 -- low byte of image_height
+ */
+typedef struct _jpeg_file_header_t {
+  uint16_t      length;
+  const uint8_t *data;
+  uint16_t      image_width_offset;
+  uint16_t      image_height_offset;
+} jpeg_file_header_t;
 
-  uint16_t tjpeg_get_header_size(void);
-  uint8_t  tjpeg_get_header(void);
+
+  const jpeg_file_header_t  *tjpeg_get_header(void);
 
   void tjpeg_init(jpeg_proc_t *processor, uint16_t width, uint16_t height);
 
@@ -79,12 +95,10 @@ typedef struct _jpeg_proc_t {
    * Adds data to be encoded to processor.
    * @param processor   processor object (may be not initialized at all)
    * @param width       width of image data [pixels]
-   * @param height      height of image data [pixels]; must be 8 unless on edge
-   *                    of image, where remaining lines wil be automatically
-   *                    filled
+   * @param height      height of image data [pixels]
    * @param data        image data in 4:2:2 YCrCb format (size must be 2 * width * height)
    */
-  void tjpeg_feed_data(jpeg_proc_t *processor, uint16_t width, uint8_t *data);
+  void tjpeg_feed_data(jpeg_proc_t *processor, uint16_t width, uint16_t height, uint8_t *data);
 
   /**
    * Encodes next block.

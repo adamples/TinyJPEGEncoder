@@ -1,6 +1,7 @@
 #ifndef _TJPEG_IMAGE_CHUNK_
 
 #include <stdint.h>
+#include <stdbool.h>
 
 
 typedef struct _tjpeg_image_chunk_t {

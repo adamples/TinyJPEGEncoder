@@ -5,7 +5,7 @@
 /**
  * Size of the buffer in bytes
  */
-#define TJPEG_BUFFER_SIZE (64)
+#define TJPEG_BUFFER_SIZE (128)
 
 
 /**
@@ -77,6 +77,14 @@ typedef struct _tjpeg_buffer_t {
    * @param bytes_n       number of bytes to copy (must be <= buffer length)
    */
   void tjpeg_buffer_copy(tjpeg_buffer_t *buffer, uint8_t *destination, int bytes_n);
+
+  /**
+   * Adds one byte to buffer, after actual write_pointer. Remaining bits in current
+   * byte are filled with zeroes.
+   * @param buffer  pointer to buffer structure
+   * @param byte    byte to add to buffer
+   */
+  void tjpeg_buffer_add_byte(tjpeg_buffer_t *buffer, uint8_t byte);
 
 
 #define _TJPEG_BUFFER_H_

@@ -85,10 +85,19 @@ void tjpeg_buffer_add(tjpeg_buffer_t *buffer, uint16_t bits, uint8_t length)
     assert(buffer->read_offset >= 0 && buffer->read_offset < sizeof(buffer->data));
 
     buffer->data[buffer->write_offset] |= (uint8_t) (bits >> shift);
+    if (buffer->data[buffer->write_offset] == 0xff) {
+      printf("Adding stuff byte\n");
+      ++buffer->write_offset;
+      if (buffer->write_offset == sizeof(buffer->data))
+        buffer->write_offset = 0;
+      buffer->data[buffer->write_offset] = 0;
+      assert(buffer->write_offset != buffer->read_offset);
+    }
     ++buffer->write_offset;
     if (buffer->write_offset == sizeof(buffer->data))
       buffer->write_offset = 0;
     buffer->data[buffer->write_offset] = 0;
+    assert(buffer->write_offset != buffer->read_offset);
     /* Shifted bytes were not added */
     length = shift;
     /* Bit offset is now 0 */
@@ -111,6 +120,10 @@ void tjpeg_buffer_add(tjpeg_buffer_t *buffer, uint16_t bits, uint8_t length)
 
   printf("  ");
   for (int i = buffer->read_offset; 1; i = (i + 1) % sizeof(buffer->data)) {
+    if (buffer->data[i] == 0xff) {
+      //printf("undetected marker\n");
+      //exit(0);
+    }
     if (i % 8 == 0)
       printf("\n  ");
       printf("0b");
@@ -148,7 +161,7 @@ void tjpeg_buffer_add_ac(tjpeg_buffer_t *buffer, const uint16_t* table, uint8_t 
     value, run, length, run * 16 + length, code);
 
   if ((code & 0x000f) > 11)
-    tjpeg_buffer_add(buffer, (code >> 4) & 0xf000, (code & 0x000f) + 1);
+    tjpeg_buffer_add(buffer, (code >> 4) | 0xf000, (code & 0x000f) + 1);
   else
     tjpeg_buffer_add(buffer, code >> 4, (code & 0x000f) + 1);
 
@@ -212,4 +225,22 @@ void tjpeg_buffer_copy(tjpeg_buffer_t *b, uint8_t *destination, int bytes_n)
       b->read_offset = bytes_n - at_end;
     }
   }
+}
+
+
+void tjpeg_buffer_add_byte(tjpeg_buffer_t *b, uint8_t byte)
+{
+  if (b->bit_offset != 0) {
+    b->write_offset += 1;
+    b->bit_offset = 0;
+
+    if (b->write_offset >= sizeof(b->data))
+      b->write_offset = 0;
+  }
+
+  b->data[b->write_offset] = byte;
+  b->write_offset += 1;
+
+  if (b->write_offset >= sizeof(b->data))
+    b->write_offset = 0;
 }
