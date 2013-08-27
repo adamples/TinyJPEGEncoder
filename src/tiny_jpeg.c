@@ -6,8 +6,6 @@
 #include <assert.h>
 #include <string.h>
 
-#include <stdio.h>
-
 
 static const int ZIGZAG[64] = {
     0,
@@ -156,8 +154,8 @@ static const uint8_t FILE_HEADER_DATA[] = {
       0x00, 0x3f, 0x00              /* 3 bytes to ignore */
 };
 
-static const uint16_t HEADER_IMAGE_HEIGHT_OFFSET = 94;
-static const uint16_t HEADER_IMAGE_WIDTH_OFFSET = 96;
+#define HEADER_IMAGE_HEIGHT_OFFSET (94)
+#define HEADER_IMAGE_WIDTH_OFFSET  (96)
 
 static const jpeg_file_header_t FILE_HEADER = {
   .length = sizeof(FILE_HEADER_DATA),
@@ -178,83 +176,57 @@ static const int8_t QUANTIZATION_MATRIX[64] = {
 };
 
 
-void print_int16(int16_t *data) {
-  printf("[\n");
-
-  for (int y = 0; y < 8; ++y) {
-    printf("  ");
-    for (int x = 0; x < 8; ++x) {
-      printf("%3d", data[x + y * 8]);
-      if (x != 7) printf(", ");
-    }
-    printf(";\n");
-  }
-
-  printf("]\n");
-}
-
-
-void print_int8(int8_t *data) {
-  printf("[\n");
-
-  for (int y = 0; y < 8; ++y) {
-    printf("  ");
-    for (int x = 0; x < 8; ++x) {
-      printf("%3d", data[x + y * 8]);
-      if (x != 7) printf(", ");
-    }
-    printf(";\n");
-  }
-
-  printf("]\n");
-}
-
-
 void tjpeg_quantize(int16_t *block)
 {
-  for (uint8_t i = 0; i < 64; ++i) {
-    assert(QUANTIZATION_MATRIX[i] != 0);
-    assert(block[i] > -2048 && block[i] < 2048);
+  int8_t *qm = (int8_t *) QUANTIZATION_MATRIX;
 
-    int16_t tmp = 2 * block[i] / QUANTIZATION_MATRIX[i];
+  for (int i = 0; i < 64; ++i, ++block, ++qm)
+  {
+    // Tutaj można dodać zaokrąglanie, ale to bardzo zwalnia
+    assert(*qm != 0);
+    assert(*block > -2048 && *block < 2048);
+    assert(false);
 
-    block[i] = tmp >> 1;
+    *block = 2 * *block / *qm;
 
-    if (tmp > 0) {
-      if ((tmp & 1) == 1) ++block[i];
-    } else {
-      if ((tmp & 0) == 1) --block[i];
+    //~ if (*block % 2 == 0)
+      //~ *block /= 2;
+    //~ else
+      //~ if (*block > 0)
+        //~ *block = *block / 2 + 1;
+      //~ else
+        //~ *block = *block / 2 - 1;
+
+    switch (*block & 0x80000001) {
+      case 0x80000001 : *block = *block / 2 - 1; break;
+      case 0x00000001 : *block = *block / 2 + 1; break;
+      default : *block /= 2;
     }
+    //*block /= *qm;
   }
 }
 
 
 void tjpeg_encode(jpeg_proc_t *p, int16_t *last_dc, const uint16_t *dc_table, const uint16_t *ac_table, int16_t *block)
 {
-  printf("Encoding Y channel\n");
-  printf("Encoding DC coef\n");
-
   tjpeg_buffer_add_dc(&p->buffer, dc_table, block[0] - *last_dc);
   *last_dc = block[0];
 
   for (uint8_t i = 1; i < 64; ++i) {
     uint8_t run = 0;
 
-    printf("Current pos = %d (zigzaged = %d)\n", i, ZIGZAG[i]);
     while (i < 64 && block[ZIGZAG[i]] == 0) {
       ++i;
       ++run;
     }
 
     if (i == 64) {
-      printf("End of block\n");
       tjpeg_buffer_add_ac(&p->buffer, ac_table, 0, 0);
       break;
     }
     else
     {
       while (run >= 16) {
-        printf("Adding run of 16 zeroes\n");
         tjpeg_buffer_add_ac(&p->buffer, ac_table, 15, 0);
         run -= 16;
       }
@@ -265,13 +237,11 @@ void tjpeg_encode(jpeg_proc_t *p, int16_t *last_dc, const uint16_t *dc_table, co
 }
 
 
-void tjpeg_compress_block(int16_t *block)
+static inline void tjpeg_compress_block(int16_t *block)
 {
-  //print_int16(block);
-  reference_dct(block);
-  print_int16(block);
+  //reference_dct(block);
+  fastest_dct(block);
   tjpeg_quantize(block);
-  print_int16(block);
 }
 
 
@@ -283,7 +253,6 @@ const jpeg_file_header_t *tjpeg_get_header(void)
 
 void tjpeg_init(jpeg_proc_t *p, uint16_t width, uint16_t height)
 {
-  printf("Creating new processor with size %dx%d.\n", width, height);
   tjpeg_buffer_init(&p->buffer);
   p->image_width = width;
   p->image_height = height;
@@ -300,7 +269,6 @@ void tjpeg_init(jpeg_proc_t *p, uint16_t width, uint16_t height)
 
 void tjpeg_feed_data(jpeg_proc_t *p, uint16_t width, uint16_t height, uint8_t *data)
 {
-  printf("Feeding new data to processor (%d columns)\n", width);
   tjpeg_image_chunk_init(&p->chunk, data, width, height);
 }
 
@@ -328,8 +296,6 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
     else
     {
       if (tjpeg_image_chunk_next_block(&p->chunk)) {
-        printf("block %d (%dx%d)\n", p->blocks_n, p->blocks_n % 40, p->blocks_n / 40);
-
         tjpeg_image_chunk_copy_y1(&p->chunk, block);
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_y1_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
@@ -346,8 +312,6 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_cb_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
 
-/*        if (p->blocks_n == 40)
-          exit(0); */
         p->blocks_n += 1;
       } else {
         p->x_pos += p->chunk.width;
@@ -359,18 +323,15 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
 
         if (p->y_pos >= p->image_height) {
           if (p->eoi) {
-            printf("End of image!\n");
             break;
           }
           else {
-            printf("Adding EOI marker\n");
             tjpeg_buffer_add_byte(&p->buffer, 0xff);
             tjpeg_buffer_add_byte(&p->buffer, MARKER_EOI);
             p->eoi = true;
           }
         }
         else {
-          printf("Need more data!\n");
           break;
         }
       }

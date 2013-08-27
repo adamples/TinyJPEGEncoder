@@ -5,8 +5,10 @@
 #include "tiny_jpeg.h"
 
 
-int main(void)
+int main(int argc, char **argv)
 {
+  printf("Start\n");
+
   jpeg_proc_t               processor;
   const jpeg_file_header_t  *header;
 
@@ -17,7 +19,7 @@ int main(void)
   int       file_size = 0;
   int       bytes;
 
-  FILE* input_file = fopen("input.bmp", "rb");
+  FILE* input_file = fopen(argv[1], "rb");
   fread(output_image, 54, 1, input_file);
   width = *((int32_t *) (output_image + 18));
   height = *((int32_t *) (output_image + 22));
@@ -49,7 +51,7 @@ int main(void)
 
   tjpeg_init(&processor, width, height);
 
-  FILE* output_file = fopen("image.jpeg", "wb");
+  FILE* output_file = fopen("output.jpeg", "wb");
 
   header = tjpeg_get_header();
   memcpy(output_image, header->data, header->length);
@@ -79,6 +81,8 @@ int main(void)
   }
 
   printf("Blocks number: %d.\n", processor.blocks_n);
-
   fclose(output_file);
+
+  printf("koniec\n");
+  return 0;
 }

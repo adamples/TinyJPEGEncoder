@@ -5,7 +5,7 @@
 /**
  * Size of the buffer in bytes
  */
-#define TJPEG_BUFFER_SIZE (128)
+#define TJPEG_BUFFER_SIZE (512)
 
 
 /**
