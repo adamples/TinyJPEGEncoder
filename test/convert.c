@@ -7,8 +7,6 @@
 
 int main(int argc, char **argv)
 {
-  printf("Start\n");
-
   jpeg_proc_t               processor;
   const jpeg_file_header_t  *header;
 
@@ -23,7 +21,6 @@ int main(int argc, char **argv)
   fread(output_image, 54, 1, input_file);
   width = *((int32_t *) (output_image + 18));
   height = *((int32_t *) (output_image + 22));
-  printf("%dx%d\n", width, height);
   input_image = malloc(width * height * 3);
   fread(input_image, width * height * 3, 1, input_file);
   fclose(input_file);
@@ -51,7 +48,7 @@ int main(int argc, char **argv)
 
   tjpeg_init(&processor, width, height);
 
-  FILE* output_file = fopen("output.jpeg", "wb");
+  FILE* output_file = fopen(argv[2], "wb");
 
   header = tjpeg_get_header();
   memcpy(output_image, header->data, header->length);
@@ -74,15 +71,10 @@ int main(int argc, char **argv)
       fwrite(output_image, bytes, 1, output_file);
       fflush(output_file);
       file_size += bytes;
-      //~ printf("Bytes written: %d.\n", bytes);
-      //~ printf("File size: %d.\n", file_size);
-      //~ printf("Header size: %d.\n", header->length);
     } while (bytes > 0);
   }
 
-  printf("Blocks number: %d.\n", processor.blocks_n);
   fclose(output_file);
 
-  printf("koniec\n");
   return 0;
 }
