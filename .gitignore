@@ -1,1 +1,3 @@
 test/compare/output/*.jpeg
+test/time/*.bmp
+TinyJPEG.geany
