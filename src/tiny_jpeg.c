@@ -227,19 +227,24 @@ void tjpeg_encode(jpeg_proc_t *p, int16_t *last_dc, const uint16_t *dc_table, co
 
 static inline void tjpeg_compress_block(int16_t *block)
 {
-  // reference_dct(block);
+  //~ printf("Before DCT:\n");
+  //~ for (int i = 0; i < 64; ++i)
+    //~ printf(" %4d%s", block[i], i % 8 == 7 ? ";\n" : ",");
+  //~ printf("\n");
+
+  //~ reference_dct(block);
   fastest_dct(block);
 
-  //~ printf("Uncompressed data:\n");
+  //~ printf("Uncompressed:\n");
   //~ for (int i = 0; i < 64; ++i)
-    //~ printf(" %4d%c", block[i], i % 8 == 7 ? '\n' : ' ');
+    //~ printf(" %4d%s", block[i], i % 8 == 7 ? ";\n" : ",");
   //~ printf("\n");
 
   tjpeg_quantize(block);
 
-  //~ printf("Compressed data:\n");
+  //~ printf("Compressed:\n");
   //~ for (int i = 0; i < 64; ++i)
-    //~ printf(" %4d%c", block[i], i % 8 == 7 ? '\n' : ' ');
+    //~ printf(" %4d%s", block[i], i % 8 == 7 ? ";\n" : ",");
   //~ printf("\n");
 }
 

@@ -10,7 +10,7 @@ int main(int argc, char **argv)
   jpeg_proc_t               processor;
   const jpeg_file_header_t  *header;
 
-  int       width, height;
+  int       width, height, offset;
   uint8_t   *input_image;
   uint8_t   *ycbcr_image;
   uint8_t   output_image[0xffff];
@@ -21,13 +21,15 @@ int main(int argc, char **argv)
   fread(output_image, 54, 1, input_file);
   width = *((int32_t *) (output_image + 18));
   height = *((int32_t *) (output_image + 22));
+  offset = *((int32_t *) (output_image + 10));
   input_image = malloc(width * height * 3);
+  fread(input_image, offset - 54, 1, input_file);
   fread(input_image, width * height * 3, 1, input_file);
   fclose(input_file);
 
   ycbcr_image = malloc(width * height * 2);
 
-  for (int y = 0; y < height; ++y)
+  for (int y = 0; y < height; ++y) {
     for (int x = 0; x < width; x += 2) {
       double r1 = input_image[3 * (x + (height - y - 1) * width) + 2];
       double g1 = input_image[3 * (x + (height - y - 1) * width) + 1];
@@ -35,6 +37,7 @@ int main(int argc, char **argv)
       double r2 = input_image[3 * (x + (height - y - 1) * width) + 5];
       double g2 = input_image[3 * (x + (height - y - 1) * width) + 4];
       double b2 = input_image[3 * (x + (height - y - 1) * width) + 3];
+
       double cb1 = 128.0 - (0.168736 * r1) - (0.331264 * g1) + (0.5 * b1);
       double cb2 = 128.0 - (0.168736 * r2) - (0.331264 * g2) + (0.5 * b2);
       double cr1 = 128.0 + (0.5 * r1) - (0.418688 * g1) - (0.081312 * b1);
@@ -45,6 +48,9 @@ int main(int argc, char **argv)
       ycbcr_image[2 * (x + y * width) + 3] = (cb1 + cb2) / 2;
       ycbcr_image[2 * (x + y * width) + 1] = (cr1 + cr2) / 2;
     }
+
+    //~ printf("\n");
+  }
 
   tjpeg_init(&processor, width, height);
 
