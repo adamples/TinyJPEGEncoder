@@ -1,7 +1,14 @@
 #include "tjpeg_buffer.h"
-
 #include <assert.h>
 #include <string.h>
+#include <stdlib.h>
+#include <stdio.h>
+
+
+struct _tjpeg_buffer_t {
+  unsigned char  data[TJPEG_BUFFER_SIZE];  /** Buffer data */
+  unsigned int  bit_size;  /**  Size of buffer in bits */
+};
 
 
 uint8_t tjpeg_get_length(int16_t x)
@@ -21,78 +28,151 @@ uint8_t tjpeg_get_length(int16_t x)
 
 void tjpeg_buffer_init(tjpeg_buffer_t *buffer)
 {
-  buffer->read_offset = 0;
-  buffer->write_offset = 0;
-  buffer->bit_offset = 0;
-  buffer->data[0] = 0;
+  buffer->bit_size = 0;
+  *((int *) buffer) = 0;
 }
 
 
-uint16_t tjpeg_buffer_get_length(tjpeg_buffer_t *b)
+tjpeg_buffer_t *tjpeg_buffer_new(void)
+{
+  tjpeg_buffer_t *buffer = (tjpeg_buffer_t *) malloc(sizeof(tjpeg_buffer_t));
+  tjpeg_buffer_init(buffer);
+  return buffer;
+}
+
+
+unsigned char *tjpeg_buffer_get_data(tjpeg_buffer_t *b)
 {
   assert(b != NULL);
-
-  if (b->read_offset <= b->write_offset)
-    return b->write_offset - b->read_offset;
-  else
-    return TJPEG_BUFFER_SIZE - (b->read_offset - b->write_offset);
+  return b->data;
 }
 
 
-uint16_t tjpeg_buffer_get_bitlength(tjpeg_buffer_t *b)
+int tjpeg_buffer_get_length(tjpeg_buffer_t *b)
 {
   assert(b != NULL);
-
-  return tjpeg_buffer_get_length(b) * 8 + b->bit_offset;
+  return b->bit_size >> 3;
 }
 
 
-void tjpeg_buffer_add(tjpeg_buffer_t *buffer, uint16_t bits, uint8_t length)
+/*
+ * Appends certain number of bits stored in integer in little-endian order.
+ *
+ * @example
+ * Little endian, 32-bit: add 13 bits to buffer of length 22:
+ *
+ * Buffer:
+ * |   00   |   01   |   02   |   03   |   04   |   05   |   06   |   07   |
+ * |hgfedcba|ponmlkji|__vutsrq|________|________|________|________|________|
+ *
+ * Bits to add:
+ * |   00   |   01   |   02   |   03   |
+ * |HGFEDCBA|___MLKJI|________|________|
+ * SHL 6 (bit_size % 8 = bit_size & 0x07)
+ * |   00   |   01   |   02   |   03   |
+ * |BA______|JIHGFEDC|_____MLK|________|
+ *
+ *                    pointer:
+ * |   00   |   01   |   02   |   03   |   04   |   05   |   06   |   07   |
+ * |hgfedcba|ponmlkji|__vutsrq|________|________|________|________|________|
+ * - OR --------------------------------------------------------------------
+ *                   |   00   |   01   |   02   |   03   |
+ *                   |BA______|JIHGFEDC|_____MLK|________|
+ * - = ---------------------------------------------------------------------
+ * |   00   |   01   |   02   |   03   |   04   |   05   |   06   |   07   |
+ * |hgfedcba|ponmlkji|BAvutsrq|JIHGFEDC|_____MLK|________|________|________|
+ */
+
+
+void buffer_print(tjpeg_buffer_t *buffer)
 {
-  int8_t shift = 0; /* right--positive, left--negative */
+  printf("\n\nBuffer of size %d:\n  ", buffer->bit_size);
 
-  assert(buffer != NULL);
-  assert(length > 0 && length <= 16);
-  assert(buffer->bit_offset >= 0 && buffer->bit_offset < 8);
-  assert(buffer->write_offset >= 0 && buffer->write_offset < sizeof(buffer->data));
-  assert(buffer->read_offset >= 0 && buffer->read_offset < sizeof(buffer->data));
-
-  bits &= (1 << length) - 1;
-  shift = (-8 + buffer->bit_offset + length);
-
-  while (shift >= 0) {
-    assert(length > 0 && length <= 16);
-    assert(buffer->write_offset >= 0 && buffer->write_offset < sizeof(buffer->data));
-    assert(buffer->read_offset >= 0 && buffer->read_offset < sizeof(buffer->data));
-
-    buffer->data[buffer->write_offset] |= (uint8_t) (bits >> shift);
-    if (buffer->data[buffer->write_offset] == 0xff) {
-      ++buffer->write_offset;
-      if (buffer->write_offset == sizeof(buffer->data))
-        buffer->write_offset = 0;
-      buffer->data[buffer->write_offset] = 0;
-      assert(buffer->write_offset != buffer->read_offset);
-    }
-    ++buffer->write_offset;
-    if (buffer->write_offset == sizeof(buffer->data))
-      buffer->write_offset = 0;
-    buffer->data[buffer->write_offset] = 0;
-    assert(buffer->write_offset != buffer->read_offset);
-    /* Shifted bytes were not added */
-    length = shift;
-    /* Bit offset is now 0 */
-    buffer->bit_offset = 0;
-    shift = (-8 + length);
+  for (int i = 0; i < buffer->bit_size / 8 + 1; ++i) {
+    for (int j = 7; j >= 0; j -= 1)
+      if (i * 8 + (7 - j) < buffer->bit_size)
+        printf("%d", (buffer->data[i] & (1 << j)) ? 1 : 0);
+      else
+        printf("_");
+    printf((i % 8 == 7) ? "\n  " : " ");
   }
 
-  assert(buffer->write_offset >= 0 && buffer->write_offset < sizeof(buffer->data));
-  assert(buffer->read_offset >= 0 && buffer->read_offset < sizeof(buffer->data));
-  assert(shift < 0 && shift >= -8);
+  printf("\n\n");
+}
 
-  buffer->data[buffer->write_offset] |= (uint8_t) bits << (-shift);
-  buffer->bit_offset = 8 + shift;
 
-  assert(buffer->bit_offset >= 0 && buffer->bit_offset < 8);
+/*
+ * Appends certain number of bits stored in integer in little-endian order.
+ *
+ * @example
+ * Little endian, 32-bit: add 13 bits to buffer of length 22:
+ *
+ * Buffer:
+ * |   00   |   01   |   02   |   03   |   04   |   05   |   06   |   07   |
+ * |abcdefgh|ijklmnop|qrstuv__|________|________|________|________|________|
+ *
+ * Bits to add:
+ * |   00   |   01   |   02   |   03   |
+ * |FGHIJKLM|___ABCDE|________|________|
+ * SHL 13: 32 - length - bit_size % 8 = 32 - 13 - 6 = 13
+ * |   00   |   01   |   02   |   03   |
+ * |________|KLM_____|CDEFGHIJ|______AB|
+ */
+void tjpeg_buffer_add_le(tjpeg_buffer_t *buffer, unsigned int bits, unsigned char length)
+{
+  unsigned char *wp;
+  unsigned char *rp;
+
+  bits = bits << (sizeof(bits) * 8 - length - (buffer->bit_size & 0x07));
+  wp = buffer->data + (buffer->bit_size >> 3);
+  rp = ((unsigned char *) &bits) + sizeof(bits) - 1;
+
+  for (int i = 0; i < length + 8; i += 8, ++wp, --rp, *wp = 0) {
+    *wp |= *rp;
+    if (*wp == 0xff) {
+      ++wp;
+      buffer->bit_size += 8;
+      *wp = 0;
+    }
+  }
+
+  //pointer = (unsigned int *) (buffer->data + (buffer->bit_size >> 3));
+  //*pointer |= bits << (buffer->bit_size & 0x07);
+  //*pointer &= ~(bits << (buffer->bit_size & 0x07));
+
+#ifndef NDEBUG
+  //~ unsigned int shifted_bits = bits << (buffer->bit_size & 0x07);
+  //~ unsigned int mask = (1 << length) - 1;
+  //~ unsigned int shifted_mask = mask << (buffer->bit_size & 0x07);
+
+  //~ printf("Added %d bits: 0x%08x;  mask: 0x%08x;  shift: %d\n", length, bits, mask, buffer->bit_size & 0x07);
+  //~ printf("shifted bits: 0x%08x;  shifted mask: 0x%08x\n", shifted_bits, shifted_mask);
+  //~ printf("dereferenced pointer: 0x%08x\n", *pointer);
+  //~ printf("0x%08x =?= 0x%08x\n", *pointer & shifted_mask, shifted_bits & shifted_mask);
+
+  //~ assert((*pointer & shifted_mask) == (shifted_bits & shifted_mask));
+#endif
+
+  buffer->bit_size += length;
+  //buffer_print(buffer);
+}
+
+
+void tjpeg_buffer_add(tjpeg_buffer_t *buffer, unsigned int bits, unsigned char length)
+{
+  assert(buffer != NULL);
+  assert(length <= sizeof(bits) * 8 - 8);
+  assert((buffer->bit_size + length) / 8 <= TJPEG_BUFFER_SIZE);
+  assert((bits & ((1 << length) - 1)) == bits);
+
+  //~ for (int i = length - 1; i >= 0; --i)
+    //~ printf("%d", bits & (1 << i) ? 1 : 0);
+
+#ifdef TJPEG_BIG_ENDIAN
+  tjpeg_buffer_add_be(buffer, bits, length);
+#else
+  tjpeg_buffer_add_le(buffer, bits, length);
+#endif
 }
 
 
@@ -110,13 +190,19 @@ void tjpeg_buffer_add_ac(tjpeg_buffer_t *buffer, const uint16_t* table, uint8_t 
   assert(length < 12);
   assert(code != 0);
 
+  //~ printf("\033[34mAC:%d/%d:\033[0m", run, value);
+
   if ((code & 0x000f) > 11)
-    tjpeg_buffer_add(buffer, (code >> 4) | 0xf000, (code & 0x000f) + 1);
+    tjpeg_buffer_add(buffer, (code >> 4) | (0x0f00 << ((code & 0x000f) - 11)), (code & 0x000f) + 1);
   else
     tjpeg_buffer_add(buffer, code >> 4, (code & 0x000f) + 1);
 
+  //~ printf("\033[34m:\033[0m");
+
   if (length != 0)
-    tjpeg_buffer_add(buffer, uvalue, length);
+    tjpeg_buffer_add(buffer, uvalue & ((1 << length) - 1), length);
+
+  //~ printf("\033[34m|\033[0m");
 }
 
 
@@ -133,49 +219,28 @@ void tjpeg_buffer_add_dc(tjpeg_buffer_t *buffer, const uint16_t *table, int16_t 
   assert(length < 12);
   assert(code != 0);
 
+  //~ printf("\033[34mDC:%d:\033[0m", value);
+
   tjpeg_buffer_add(buffer, code >> 4, code & 0x000f);
 
+  //~ printf("\033[34m:\033[0m");
+
   if (length != 0)
-    tjpeg_buffer_add(buffer, uvalue, length);
+    tjpeg_buffer_add(buffer, uvalue & ((1 << length) - 1), length);
+
+  //~ printf("\033[34m|\033[0m");
 }
 
 
-void tjpeg_buffer_copy(tjpeg_buffer_t *b, uint8_t *destination, int bytes_n)
+void tjpeg_buffer_add_byte(tjpeg_buffer_t *b, unsigned char byte)
 {
-  assert(bytes_n <= tjpeg_buffer_get_length(b));
-
-  if (b->read_offset < b->write_offset) {
-    memcpy(destination, b->data + b->read_offset, bytes_n);
-    b->read_offset += bytes_n;
-  } else {
-    int at_end = TJPEG_BUFFER_SIZE - b->read_offset;
-
-    if (at_end >= bytes_n) {
-      memcpy(destination, b->data + b->read_offset, bytes_n);
-      b->read_offset += bytes_n;
-      if (b->read_offset >= TJPEG_BUFFER_SIZE) b->read_offset = 0;
-    } else {
-      memcpy(destination, b->data + b->read_offset, at_end);
-      memcpy(destination + at_end, b->data, bytes_n - at_end);
-      b->read_offset = bytes_n - at_end;
-    }
-  }
+  b->bit_size = ((b->bit_size + 15) / 8) * 8;
+  b->data[b->bit_size / 8] = byte;
 }
 
 
-void tjpeg_buffer_add_byte(tjpeg_buffer_t *b, uint8_t byte)
+void tjpeg_buffer_trunc_bytes(tjpeg_buffer_t *b)
 {
-  if (b->bit_offset != 0) {
-    b->write_offset += 1;
-    b->bit_offset = 0;
-
-    if (b->write_offset >= sizeof(b->data))
-      b->write_offset = 0;
-  }
-
-  b->data[b->write_offset] = byte;
-  b->write_offset += 1;
-
-  if (b->write_offset >= sizeof(b->data))
-    b->write_offset = 0;
+  b->data[0] = b->data[b->bit_size / 8];
+  b->bit_size &= 0x07;
 }

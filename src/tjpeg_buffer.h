@@ -11,40 +11,42 @@
 /**
  * TinyJPEG Buffer structure
  */
-typedef struct _tjpeg_buffer_t {
-  uint8_t   data[TJPEG_BUFFER_SIZE];  /** Buffer data */
-  uint8_t   read_offset;              /** Output pointer (bytes) */
-  uint8_t   bit_offset;               /** Output pointer (bits) */
-  uint8_t   write_offset;             /** Input pointer */
-} tjpeg_buffer_t;
+typedef struct _tjpeg_buffer_t tjpeg_buffer_t;
 
 
   /**
-   * Initializes buffer for reading and writing
+   * Initializes the buffer
    */
   void tjpeg_buffer_init(tjpeg_buffer_t *buffer);
 
+
+  tjpeg_buffer_t * tjpeg_buffer_new(void);
+
+
   /**
-   * Returns length of the buffer in bytes
+   * Returns pointer to first byte of buffer data. Buffer data is always
+   * continuous memory chunk.
+   * @param buffer  pointer to buffer structure
+   * @return pointer to the buffer data
+   */
+  unsigned char *tjpeg_buffer_get_data(tjpeg_buffer_t *buffer);
+
+  /**
+   * Returns length of the buffer in bytes (only fully filled bytes are included)
    * @param buffer  pointer to buffer structure
    * @return length of the buffer
    */
-  uint16_t tjpeg_buffer_get_length(tjpeg_buffer_t *buffer);
+  int tjpeg_buffer_get_length(tjpeg_buffer_t *buffer);
+
 
   /**
-   * Returns length of the buffer in bits
-   * @param buffer  pointer to buffer structure
-   * @return length of the buffer
-   */
-  uint16_t tjpeg_buffer_get_bitlength(tjpeg_buffer_t *buffer);
-
-  /**
-   * Appends bit string to buffer
+   * Appends bit string to buffer. Maximum number of bits that can be added
+   * depends on sizeof(int) -- it's most significant byte cannot contain data.
    * @param buffer  pointer to buffer structure
    * @param bits    bits to append (uperfluous bits are ignored)
-   * @param bits_n  number of bits to add (1 -- 16)
+   * @param bits_n  number of bits to add
    */
-  void tjpeg_buffer_add(tjpeg_buffer_t *buffer, uint16_t bits, uint8_t bits_n);
+  void tjpeg_buffer_add(tjpeg_buffer_t *buffer, unsigned int bits, unsigned char bits_n);
 
   /**
    * Appends to buffer AC huffman code with value. Passed table must contain mapping
@@ -71,20 +73,14 @@ typedef struct _tjpeg_buffer_t {
   void tjpeg_buffer_add_dc(tjpeg_buffer_t *buffer, const uint16_t *table, int16_t value);
 
   /**
-   * Copies number of bytes from buffer to destination in memory.
-   * @param buffer        pointer to buffer structure
-   * @param destination   pointer to allocated memory block
-   * @param bytes_n       number of bytes to copy (must be <= buffer length)
-   */
-  void tjpeg_buffer_copy(tjpeg_buffer_t *buffer, uint8_t *destination, int bytes_n);
-
-  /**
-   * Adds one byte to buffer, after actual write_pointer. Remaining bits in current
+   * Adds one byte to buffer, after actual write pointer. Remaining bits in current
    * byte are filled with zeroes.
    * @param buffer  pointer to buffer structure
    * @param byte    byte to add to buffer
    */
-  void tjpeg_buffer_add_byte(tjpeg_buffer_t *buffer, uint8_t byte);
+  void tjpeg_buffer_add_byte(tjpeg_buffer_t *buffer, unsigned char byte);
+
+  void tjpeg_buffer_trunc_bytes(tjpeg_buffer_t *buffer);
 
 
 #define _TJPEG_BUFFER_H_

@@ -1,4 +1,5 @@
 #include "tiny_jpeg.h"
+#include "tjpeg_qmatrix.h"
 #include "dct.h"
 
 #include <stdint.h>
@@ -80,17 +81,10 @@ static const uint8_t FILE_HEADER_DATA[] = {
       0x00, 0x01,                   /* Aspect ratio: 1:1 (X part) */
       0x00, 0x01,                   /* Aspect ratio: 1:1 (Y part) */
       0x00, 0x00,                   /* Thumbnail size (no thumbnail) */
-    0xff, MARKER_DQT,               /* Quantization table */
+    0xff, MARKER_DQT,               /* Quantization matrix */
       0x00, 0x43,                   /* Segment length (67 bytes) */
       0x00,                         /* Quantization matrix: index 0, precision 8 bits */
-      0x10, 0x0b, 0x0c, 0x0e, 0x0c, 0x0a, 0x10, 0x0e,
-      0x0d, 0x0e, 0x12, 0x11, 0x10, 0x13, 0x18, 0x28,
-      0x1a, 0x18, 0x16, 0x16, 0x18, 0x31, 0x23, 0x25,
-      0x1d, 0x28, 0x3a, 0x33, 0x3d, 0x3c, 0x39, 0x33,
-      0x38, 0x37, 0x40, 0x48, 0x5c, 0x4e, 0x40, 0x44,
-      0x57, 0x45, 0x37, 0x38, 0x50, 0x6d, 0x51, 0x57,
-      0x5f, 0x62, 0x67, 0x68, 0x67, 0x3e, 0x4d, 0x71,
-      0x79, 0x70, 0x64, 0x78, 0x5c, 0x65, 0x67, 0x63,
+      QUANTIZATION_MATRIX_HEADER_DATA,
     0xff, MARKER_SOF0,              /* Start of frame */
       0x00, 0x11,                   /* Segment length (17 bytes) */
       0x08,                         /* Precision/bpp (8bpp) */
@@ -165,14 +159,7 @@ static const jpeg_file_header_t FILE_HEADER = {
 };
 
 static const int8_t QUANTIZATION_MATRIX[64] = {
-  16,  11,  10,  16,  24,  40,  51,  61,
-  12,  12,  14,  19,  26,  58,  60,  55,
-  14,  13,  16,  24,  40,  57,  69,  56,
-  14,  17,  22,  29,  51,  87,  80,  62,
-  18,  22,  37,  56,  68, 109, 103,  77,
-  24,  35,  55,  64,  81, 104, 113,  92,
-  49,  64,  78,  87, 103, 121, 120, 101,
-  72,  92,  95,  98, 112, 100, 103,  99
+  QUANTIZATION_MATRIX_DATA
 };
 
 
@@ -185,7 +172,6 @@ void tjpeg_quantize(int16_t *block)
     // Tutaj można dodać zaokrąglanie, ale to bardzo zwalnia
     assert(*qm != 0);
     assert(*block > -2048 && *block < 2048);
-    assert(false);
 
     *block = 2 * *block / *qm;
 
@@ -209,7 +195,7 @@ void tjpeg_quantize(int16_t *block)
 
 void tjpeg_encode(jpeg_proc_t *p, int16_t *last_dc, const uint16_t *dc_table, const uint16_t *ac_table, int16_t *block)
 {
-  tjpeg_buffer_add_dc(&p->buffer, dc_table, block[0] - *last_dc);
+  tjpeg_buffer_add_dc(p->buffer, dc_table, block[0] - *last_dc);
   *last_dc = block[0];
 
   for (uint8_t i = 1; i < 64; ++i) {
@@ -221,27 +207,40 @@ void tjpeg_encode(jpeg_proc_t *p, int16_t *last_dc, const uint16_t *dc_table, co
     }
 
     if (i == 64) {
-      tjpeg_buffer_add_ac(&p->buffer, ac_table, 0, 0);
+      tjpeg_buffer_add_ac(p->buffer, ac_table, 0, 0);
       break;
     }
     else
     {
       while (run >= 16) {
-        tjpeg_buffer_add_ac(&p->buffer, ac_table, 15, 0);
+        tjpeg_buffer_add_ac(p->buffer, ac_table, 15, 0);
         run -= 16;
       }
     }
 
-    tjpeg_buffer_add_ac(&p->buffer, CODE_TO_HUF_Y_AC, run, block[ZIGZAG[i]]);
+    tjpeg_buffer_add_ac(p->buffer, CODE_TO_HUF_Y_AC, run, block[ZIGZAG[i]]);
   }
+
+  //~ printf("\n\n");
 }
 
 
 static inline void tjpeg_compress_block(int16_t *block)
 {
-  //reference_dct(block);
+  // reference_dct(block);
   fastest_dct(block);
+
+  //~ printf("Uncompressed data:\n");
+  //~ for (int i = 0; i < 64; ++i)
+    //~ printf(" %4d%c", block[i], i % 8 == 7 ? '\n' : ' ');
+  //~ printf("\n");
+
   tjpeg_quantize(block);
+
+  //~ printf("Compressed data:\n");
+  //~ for (int i = 0; i < 64; ++i)
+    //~ printf(" %4d%c", block[i], i % 8 == 7 ? '\n' : ' ');
+  //~ printf("\n");
 }
 
 
@@ -253,7 +252,7 @@ const jpeg_file_header_t *tjpeg_get_header(void)
 
 void tjpeg_init(jpeg_proc_t *p, uint16_t width, uint16_t height)
 {
-  tjpeg_buffer_init(&p->buffer);
+  p->buffer = tjpeg_buffer_new();
   p->image_width = width;
   p->image_height = height;
   p->last_y1_dc = 0;
@@ -278,17 +277,18 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
   int     bytes_written = 0;
   int16_t block[64];
 
-  while (bytes_written < size) {
+  while (bytes_written < size - TJPEG_BUFFER_SIZE) {
     /* Check if there is data available in internal buffer */
-    if (tjpeg_buffer_get_length(&p->buffer) > 0) {
+    if (tjpeg_buffer_get_length(p->buffer) > 0) {
       int to_copy;
 
-      if (tjpeg_buffer_get_length(&p->buffer) >= size - bytes_written)
-        to_copy = size - bytes_written;
-      else
-        to_copy = tjpeg_buffer_get_length(&p->buffer);
+      //~ if (tjpeg_buffer_get_length(p->buffer) >= size - bytes_written)
+        //~ to_copy = size - bytes_written;
+      //~ else
+      to_copy = tjpeg_buffer_get_length(p->buffer);
 
-      tjpeg_buffer_copy(&p->buffer, destination, to_copy);
+      memcpy(destination, tjpeg_buffer_get_data(p->buffer), to_copy);
+      tjpeg_buffer_trunc_bytes(p->buffer);
       destination += to_copy;
       bytes_written += to_copy;
     }
@@ -296,18 +296,23 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
     else
     {
       if (tjpeg_image_chunk_next_block(&p->chunk)) {
+        //~ printf("Encoding 16x8 block:\n");
+        //~ printf("Y1:\n");
         tjpeg_image_chunk_copy_y1(&p->chunk, block);
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_y1_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
 
+        //~ printf("Y2:\n");
         tjpeg_image_chunk_copy_y2(&p->chunk, block);
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_y1_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
 
+        //~ printf("Cr:\n");
         tjpeg_image_chunk_copy_cr(&p->chunk, block);
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_cr_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
 
+        //~ printf("Cb:\n");
         tjpeg_image_chunk_copy_cb(&p->chunk, block);
         tjpeg_compress_block(block);
         tjpeg_encode(p, &p->last_cb_dc, CODE_TO_HUF_Y_DC, CODE_TO_HUF_Y_AC, block);
@@ -326,8 +331,9 @@ int tjpeg_write(jpeg_proc_t *p, uint8_t* destination, int size)
             break;
           }
           else {
-            tjpeg_buffer_add_byte(&p->buffer, 0xff);
-            tjpeg_buffer_add_byte(&p->buffer, MARKER_EOI);
+            tjpeg_buffer_add_byte(p->buffer, 0xff);
+            tjpeg_buffer_add_byte(p->buffer, MARKER_EOI);
+            tjpeg_buffer_add_byte(p->buffer, MARKER_EOI);
             p->eoi = true;
           }
         }

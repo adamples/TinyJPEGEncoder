@@ -1,4 +1,4 @@
-.PHONY: all clean library test
+include Makefile.inc
 
 all: library test
 
@@ -12,3 +12,4 @@ clean:
 	make clean -C test
 	make clean -C src
 
+.PHONY: all clean library test

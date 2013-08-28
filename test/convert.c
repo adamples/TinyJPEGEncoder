@@ -74,9 +74,9 @@ int main(int argc, char **argv)
       fwrite(output_image, bytes, 1, output_file);
       fflush(output_file);
       file_size += bytes;
-      printf("Bytes written: %d.\n", bytes);
-      printf("File size: %d.\n", file_size);
-      printf("Header size: %d.\n", header->length);
+      //~ printf("Bytes written: %d.\n", bytes);
+      //~ printf("File size: %d.\n", file_size);
+      //~ printf("Header size: %d.\n", header->length);
     } while (bytes > 0);
   }
 

@@ -51,6 +51,9 @@
 /** End of Image */
 #define MARKER_EOI  (0xd9)
 
+/** Quality coefficient for standard IJG tables */
+#define TJPEG_QUALITY 80
+
 
 /**
  * Image processor object. This structure contains no public members.
@@ -67,7 +70,7 @@ typedef struct _jpeg_proc_t {
   bool            eoi;
   int             blocks_n;
   tjpeg_image_chunk_t   chunk;
-  tjpeg_buffer_t        buffer;
+  tjpeg_buffer_t        *buffer;
 } jpeg_proc_t;
 
 /**

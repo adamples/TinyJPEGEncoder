@@ -1,25 +1,34 @@
-CFLAGS+=-Wall
-CFLAGS+=-std=gnu99
-CFLAGS+=-g
-CFLAGS+=-pg
-CFLAGS+=-O2
-CFLAGS+=-DNDEBUG
-CFLAGS+=-I../src/
+include ../Makefile.inc
 
-LDLIBS+=-lm
+TARGETS = \
+	convert \
+	test_buffer \
+	test_image_chunk \
+	$(NULL)
+#	test_dct \
+#	test_divide \
 
-TARGETS=test_buffer
+C_OBJ = $(TARGETS:=.o)
+OBJLIBS = ../src/tiny_jpeg.a
+CFLAGS += -I../src/
 
-.PHONY: all clean
+.PHONY: \
+	all clean \
+	lib_tiny_jpeg \
+	$(NULL)
 
 all: $(TARGETS)
 
+$(TARGETS): $(OBJLIBS)
+
+../src/tiny_jpeg.a: lib_tiny_jpeg
+
+lib_tiny_jpeg:
+	make tiny_jpeg.a -C ../src
+
 clean:
-	rm -f *.o *.c~ *.h~ $(TARGETS)
+	rm -f -- $(TARGETS)
+	rm -f -- $(C_OBJ)
+	rm -f -- $(TARGETS:=.d)
 
-test_1: ../src/tiny_jpeg.o ../src/dct.o ../src/tjpeg_buffer.o ../src/tjpeg_image_chunk.o
-convert: ../src/tiny_jpeg.o ../src/dct.o ../src/tjpeg_buffer.o ../src/tjpeg_image_chunk.o
-
-test_buffer: ../src/tjpeg_buffer.o
-test_image_chunk: ../src/tjpeg_image_chunk.o
-test_dct: ../src/dct.o
+-include $(TARGET:=.d)
