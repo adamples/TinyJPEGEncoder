@@ -1,3 +1,9 @@
 test/compare/output/*.jpeg
 test/time/*.bmp
+test/time/*.jpeg
+test/profile/*.bmp
+test/profile/*.jpeg
+test/profile/*.png
+test/profile/*.out
+test/profile/*.txt
 TinyJPEG.geany
